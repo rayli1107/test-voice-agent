@@ -1,0 +1,4 @@
+set CMAKE_VERSION=3.31.6 && npx expo prebuild --platform android && cd android && gradlew.bat assembleDebug && adb install -t app\build\outputs\apk\debug\app-debug.apk 
+
+echo "cd .. && adb reverse tcp:8081 tcp:8081 && npm start"
+

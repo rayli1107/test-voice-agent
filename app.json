@@ -38,7 +38,17 @@
             "backgroundColor": "#000000"
           }
         }
-      ]
+      ],
+      "expo-audio",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "node_modules/@expo-google-fonts/noto-sans-sc/500Medium/NotoSansSC_500Medium.ttf"
+          ]
+        }
+      ],
+      "react-native-audio-api"
     ],
     "experiments": {
       "typedRoutes": true,
