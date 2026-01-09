@@ -10,11 +10,13 @@ export class WhisperModel {
     private _modelTokenizerFile: File;
 
     private _nativeModule: any;
+    private _id: number;
 
     private _textDecoder = new TextDecoder(
         'utf-8', { fatal: false, ignoreBOM: true });
 
     constructor(modelConfig: SpeechToTextModelConfig, modelLabel: string) {
+        this._id = Math.floor(Math.random() * 100000);
         this._modelConfig = modelConfig;
         this._modelFolder = new Directory(
             Paths.cache, 'models', modelLabel);
@@ -27,6 +29,7 @@ export class WhisperModel {
     }
 
     public async initialize() {
+        console.log('Whisper Model initialize(): ' + this._id);
         this._modelFolder.create({ idempotent: true, intermediates: true });
 
         await this.downloadFile(
@@ -56,15 +59,18 @@ export class WhisperModel {
         if (this._nativeModule === null || this._nativeModule === undefined) {
             throw new Error('Failed to load speech to text model');
         }
-        const fn = this._nativeModule.transcribe;
+
         console.log('Whisper Model Loaded');
     }
 
     public async release() {
+        console.log('Whisper Model Unloaded');
         this._nativeModule.unload();
     }
 
     public async transcribe(uri: string, language: string = ''): Promise<string> {
+        console.log('Whisper Model transcribe(): ' + this._id);
+
         console.log(`transcribe [${language}]: ${uri}`);
 
         language = this._modelConfig.isMultilingual ? (language || 'en') : '';

@@ -1,6 +1,7 @@
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Asset } from 'expo-asset';
 import {
     RecordingPresets,
     requestRecordingPermissionsAsync,
@@ -18,6 +19,7 @@ import {
     View
 } from 'react-native';
 import { WHISPER_BASE } from 'react-native-executorch';
+import { playBase64BCMAudio } from '../../utils/base64_pcm_audio_player';
 import { WhisperModel } from '../../utils/whisper-model';
 
 interface Message {
@@ -27,8 +29,12 @@ interface Message {
     timestamp: Date;
 }
 
+const whisperModel = new WhisperModel(WHISPER_BASE, 'whisper-base');
+const audioAsset: Asset = Asset.fromModule(
+    require('../../assets/audio/Voice.mp3'));
+
 const VoiceChat = () => {
-    const queryURL = 'http://localhost:5678/webhook-test/c9afcfa9-3051-4859-99ae-97fe322c2199';
+    const queryURL = 'http://192.168.1.109:5678/webhook/c9afcfa9-3051-4859-99ae-97fe322c2199';
     const colorScheme = useColorScheme();
     const [isRecording, setIsRecording] = useState(false);
     const [messages, setMessages] = useState<Message[]>([
@@ -40,10 +46,11 @@ const VoiceChat = () => {
         },
     ]);
 
-    const whisperModel = new WhisperModel(WHISPER_BASE, 'whisper-base');
     useEffect(
         () => {
-            whisperModel.initialize();
+            whisperModel.initialize();//.then(
+            //                () => { playBase64BCMAudio(testData.audioData, testData.sample_rate); });
+            //                () => { processAudioInput(audioAsset.uri); });
             return () => { whisperModel.release(); };
         },
         []);
@@ -75,53 +82,95 @@ const VoiceChat = () => {
 
     const stopRecording = async (): Promise<string> => {
         await recorder.stop();
-        return whisperModel.transcribe(recorder.uri!, 'zh');
+        return recorder.uri!;
     }
 
-    const addUserMessage = (message: string) => {
-        console.log('userMessage: ', message);
-        const userMessage: Message = {
+    const addPlaceholderMessage = (isUser: boolean) => {
+        const placeholderMessage: Message = {
             id: Date.now().toString(),
-            text: message,
-            isUser: true,
+            text: '...',
+            isUser: isUser,
             timestamp: new Date(),
         };
-        setMessages(prev => [...prev, userMessage]);
+        setMessages(prev => [...prev, placeholderMessage]);
     }
 
-    const addAgentMessage = (message: string) => {
-        console.log('agentMessage: ', message);
-        const agentMessage: Message = {
-            id: Date.now().toString(),
-            text: message,
-            isUser: false,
-            timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, agentMessage]);
+    const setLastMessageText = (text: string) => {
+        setMessages(prev => {
+            if (prev.length === 0) return prev;
+
+            const lastMessage = prev[prev.length - 1];
+            const updatedMessage = { ...lastMessage, text: text };
+
+            return [...prev.slice(0, -1), updatedMessage];
+        });
     }
 
-    const processUserInput = async (message: string) => {
-        addUserMessage(message);
+    /*
+        const addUserMessage = (message: string) => {
+            console.log('userMessage: ', message);
+            const userMessage: Message = {
+                id: Date.now().toString(),
+                text: message,
+                isUser: true,
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, userMessage]);
+        }
+    
+        const addAgentMessage = (message: string) => {
+            console.log('agentMessage: ', message);
+            const agentMessage: Message = {
+                id: Date.now().toString(),
+                text: message,
+                isUser: false,
+                timestamp: new Date(),
+            };
+            setMessages(prev => [...prev, agentMessage]);
+        }
+    */
+    const processAudioInput = async (uri: string) => {
+        addPlaceholderMessage(true);
+        const userMessage = await whisperModel.transcribe(uri, 'zh');
+
+        setLastMessageText(userMessage);
+
+        addPlaceholderMessage(false);
 
         const request: RequestInit = {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 'message': message })
+            body: JSON.stringify({ 'message': userMessage })
         }
 
+        let response: Response;
         try {
-            const response = await fetch(queryURL, request);
-            if (!response.ok) {
-                throw new Error(response.statusText);
-            }
-
-            const data = await response.json();
-            console.log('Response: ', data);
+            console.log(`POST ${queryURL} request:\n${JSON.stringify(request)}`);
+            response = await fetch(queryURL, request);
         }
         catch (error) {
             console.error('fetch() Error: ', error);
             return;
         }
+
+        if (!response.ok) {
+            console.error(`POST ${queryURL} response: ${response.statusText}`);
+            throw new Error(response.statusText);
+        }
+
+        let data: any;
+        try {
+            data = await response.json();
+        }
+        catch (error) {
+            console.error('response.json() Error: ', error);
+            setLastMessageText("Error");
+            return;
+        }
+
+        console.log(`POST ${queryURL} response: ${data.response}`);
+        await playBase64BCMAudio(data.base64_pcm, data.sample_rate);
+        setLastMessageText(data.response);
     }
 
     const handleRecordPress = async () => {
@@ -129,7 +178,7 @@ const VoiceChat = () => {
 
         // Simulate adding a user message when recording stops
         if (isRecording) {
-            stopRecording().then(processUserInput);
+            stopRecording().then(processAudioInput);
             /*
                             const userMessage: Message = {
                                 id: Date.now().toString(),
